@@ -98,8 +98,13 @@ if [[ -f "$CGROUP_ROOT/cgroup.controllers" ]]; then
   mkdir -p "$CGROUP"
   if [[ -f "$CGROUP/memory.max" ]]; then
     echo "$MEMORY" > "$CGROUP/memory.max"
-    [[ -f "$CGROUP/memory.swap.max" ]] && echo 0 > "$CGROUP/memory.swap.max"
     log "cgroup: memory limited to $MEMORY (memory.max)"
+    if [[ -f "$CGROUP/memory.swap.max" ]]; then
+      echo 0 > "$CGROUP/memory.swap.max"
+      log "cgroup: no swap allowed (memory.swap.max = 0)"
+    elif (( $(wc -l < /proc/swaps) > 1 )); then
+      log "cgroup: WARNING swap cannot be limited here, so the container may swap instead of being OOM-killed"
+    fi
   else
     log "cgroup: memory controller not available, no memory limit"
   fi

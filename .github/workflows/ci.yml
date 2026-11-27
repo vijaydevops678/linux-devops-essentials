@@ -110,9 +110,14 @@ jobs:
         working-directory: 15-linux-containers-internals
         run: |
           if grep -qw memory /sys/fs/cgroup/cgroup.controllers; then
+            cat /proc/swaps
+            sudo swapoff -a        # without swap the limit is hit straight away
             set +e
             sudo timeout 60 ./mini-container.sh -m 50M -- tail /dev/zero
-            test $? -eq 137
+            rc=$?
+            set -e
+            echo "exit code: $rc"
+            test $rc -eq 137
           else
             echo "memory controller not available on this runner, skipping"
           fi
