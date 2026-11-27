@@ -80,3 +80,117 @@ jobs:
 
       - name: Server bootstrap (dry run)
         run: sudo ./projects/02-server-bootstrap/bootstrap.sh -n -u ci-admin -H ci-test -t UTC
+
+  smoke-test-advanced:
+    name: Smoke tests (topics 13-19)
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Boot check finds the mistakes in the sample fstab
+        run: |
+          set +e
+          ./13-boot-process/boot-health-check.sh -f 13-boot-process/sample-fstab
+          test $? -eq 1
+
+      - name: Performance snapshot
+        run: ./14-performance/perf-snapshot.sh -i 2
+
+      - name: Mini container is isolated
+        working-directory: 15-linux-containers-internals
+        run: |
+          sudo ./mini-container.sh -H ci-box -- hostname | tee out.txt
+          grep -qx ci-box out.txt
+          test "$(hostname)" != ci-box
+          sudo ./mini-container.sh -- ps aux | tee out.txt
+          grep -qE '^root +1 .*ps aux' out.txt
+
+      - name: Mini container memory limit triggers the OOM killer
+        working-directory: 15-linux-containers-internals
+        run: |
+          if grep -qw memory /sys/fs/cgroup/cgroup.controllers; then
+            set +e
+            sudo timeout 60 ./mini-container.sh -m 50M -- tail /dev/zero
+            test $? -eq 137
+          else
+            echo "memory controller not available on this runner, skipping"
+          fi
+
+      - name: Inspect the namespaces of a running container
+        working-directory: 15-linux-containers-internals
+        run: |
+          sudo ./mini-container.sh -- sleep 20 > /dev/null 2>&1 &
+          sleep 3
+          pid=$(pgrep -n -x sleep)
+          sudo ./inspect-namespaces.sh "$pid" "$$" | tee out.txt
+          grep -qE '^ +pid .*ISOLATED' out.txt
+          grep -qE '^ +net .*ISOLATED' out.txt
+
+      - name: Certificate tools
+        working-directory: /tmp
+        run: |
+          T=$GITHUB_WORKSPACE/16-nginx-and-tls
+          $T/cert-tool.sh selfsigned localhost 90
+          $T/cert-tool.sh match localhost.crt localhost.key
+          $T/cert-tool.sh csr api.example.com
+          $T/cert-tool.sh inspect api.example.com.csr
+          openssl s_server -accept 8443 -cert localhost.crt -key localhost.key -quiet -www > /dev/null 2>&1 &
+          sleep 1
+          $T/ssl-expiry-check.sh localhost:8443 localhost.crt
+          $T/cert-tool.sh chain localhost:8443
+
+      - name: Nginx reverse proxy with HTTPS (end to end)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq nginx
+          sudo mkdir -p /etc/letsencrypt/live/example.com /var/www/certbot /opt/myapp/current/static
+          (cd /tmp && "$GITHUB_WORKSPACE/16-nginx-and-tls/cert-tool.sh" selfsigned example.com 30)
+          sudo cp /tmp/example.com.crt /etc/letsencrypt/live/example.com/fullchain.pem
+          sudo cp /tmp/example.com.key /etc/letsencrypt/live/example.com/privkey.pem
+          sudo cp $GITHUB_WORKSPACE/16-nginx-and-tls/nginx/myapp.conf /etc/nginx/conf.d/myapp.conf
+          sudo nginx -t
+          sudo systemctl restart nginx
+          mkdir -p /tmp/app && echo ok > /tmp/app/health && echo "hello from the app" > /tmp/app/index.html
+          python3 -m http.server 3000 --directory /tmp/app > /dev/null 2>&1 &
+          sleep 1
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: example.com' http://localhost/)" = 301
+          curl -sk --resolve example.com:443:127.0.0.1 https://example.com/ | grep -q "hello from the app"
+          curl -sk --resolve example.com:443:127.0.0.1 -D - -o /dev/null https://example.com/health | grep -qi strict-transport-security
+          ./16-nginx-and-tls/ssl-expiry-check.sh /etc/letsencrypt/live/example.com/fullchain.pem
+
+      - name: Kernel and limits audit
+        run: |
+          set +e
+          sudo ./17-kernel-tuning-limits/kernel-limits-audit.sh -k
+          rc=$?
+          test $rc -eq 0 -o $rc -eq 1
+          set -e
+          sudo modprobe br_netfilter
+          sudo sysctl -p 17-kernel-tuning-limits/99-devops.conf
+          test "$(sysctl -n net.ipv4.ip_forward)" = 1
+
+      - name: Dotfiles install, load and uninstall
+        run: |
+          export HOME=$(mktemp -d)
+          echo "# test bashrc" > "$HOME/.bashrc"
+          ./18-environment-and-shell/install-dotfiles.sh
+          ./18-environment-and-shell/install-dotfiles.sh
+          test "$(grep -c '>>> devops-shell >>>' "$HOME/.bashrc")" -eq 1
+          bash -ic 'type mkcd && alias k' 2>/dev/null
+          ./18-environment-and-shell/install-dotfiles.sh -u
+          ! grep -q devops-shell "$HOME/.bashrc"
+
+      - name: PATH doctor catches a broken PATH
+        run: |
+          mkdir -p /tmp/ww && chmod 777 /tmp/ww
+          set +e
+          PATH="/usr/bin:/bin::relative:/tmp/ww" /usr/bin/bash ./18-environment-and-shell/path-doctor.sh -c bash
+          test $? -eq 1
+
+      - name: Triage report
+        run: |
+          set +e
+          sudo ./19-troubleshooting-playbook/triage.sh -o /tmp/triage
+          rc=$?
+          test $rc -eq 0 -o $rc -eq 1
+          sudo grep -q "RED FLAGS" /tmp/triage/triage-*.txt
