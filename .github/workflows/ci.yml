@@ -109,15 +109,17 @@ jobs:
       - name: Mini container memory limit triggers the OOM killer
         working-directory: 15-linux-containers-internals
         run: |
+          echo "oom_score_adj of this step: $(cat /proc/self/oom_score_adj)"
           if grep -qw memory /sys/fs/cgroup/cgroup.controllers; then
-            cat /proc/swaps
-            sudo swapoff -a        # without swap the limit is hit straight away
             set +e
-            sudo timeout 60 ./mini-container.sh -m 50M -- tail /dev/zero
+            # Needs 200 MB with a 50 MB limit. Bounded, so it can never exhaust the runner.
+            sudo timeout --kill-after=10 120 ./mini-container.sh -m 50M -- sh -c 'head -c 200M /dev/zero | tail > /dev/null'
             rc=$?
             set -e
             echo "exit code: $rc"
             test $rc -eq 137
+            # The same work fits with a 300 MB limit
+            sudo timeout --kill-after=10 120 ./mini-container.sh -m 300M -- sh -c 'head -c 200M /dev/zero | tail > /dev/null'
           else
             echo "memory controller not available on this runner, skipping"
           fi

@@ -66,7 +66,7 @@ Builds a tiny root filesystem by copying programs and their libraries (found wit
 sudo ./mini-container.sh                        # interactive shell inside the container
 sudo ./mini-container.sh -- ps aux              # only PID 1 is visible
 sudo ./mini-container.sh -H web-01 -- hostname  # own hostname, the host's is unchanged
-sudo ./mini-container.sh -m 50M -- tail /dev/zero   # eats memory until the OOM killer stops it (exit 137)
+sudo ./mini-container.sh -m 50M -- sh -c 'head -c 200M /dev/zero | tail'   # needs 200 MB, limit 50 MB: OOM-killed (exit 137)
 ```
 
 ### `inspect-namespaces.sh`: how is this process isolated?

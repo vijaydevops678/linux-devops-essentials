@@ -11,7 +11,8 @@
 # Example: sudo ./mini-container.sh                       (interactive shell inside the container)
 #          sudo ./mini-container.sh -m 50M -- ps aux      (run one command and exit)
 #
-# Inside the container try:  ps aux · hostname · cat /proc/self/cgroup · tail /dev/zero (hits the memory limit)
+# Inside the container try:  ps aux · hostname · cat /proc/self/cgroup
+#   head -c 200M /dev/zero | tail     (needs 200 MB: with -m 50M the OOM killer stops it)
 
 set -euo pipefail
 
@@ -135,6 +136,9 @@ set +e
   if [[ -n "$CGROUP" ]]; then
     echo "$BASHPID" > "$CGROUP/cgroup.procs"
   fi
+  # Like Docker, make the container killable when it hits its memory limit
+  # (it may inherit an "unkillable" -1000 score from the service that started it)
+  echo 0 > /proc/self/oom_score_adj 2>/dev/null || true
   exec env -i PATH=/bin HOME=/root TERM="${TERM:-xterm}" PS1="[\\u@\\h \\w]# " \
     "$UNSHARE" --pid --fork --uts --ipc --net --mount --mount-proc="$ROOTFS/proc" \
     "$CHROOT" "$ROOTFS" /bin/bash -c 'hostname "$1"; shift; exec "$@"' _ "$CT_HOSTNAME" "${CMD[@]}"
