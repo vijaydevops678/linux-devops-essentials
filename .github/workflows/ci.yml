@@ -151,7 +151,7 @@ jobs:
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq nginx
           sudo mkdir -p /etc/letsencrypt/live/example.com /var/www/certbot /opt/myapp/current/static
-          (cd /tmp && "$GITHUB_WORKSPACE/16-nginx-and-tls/cert-tool.sh" selfsigned example.com 30)
+          (cd /tmp && "$GITHUB_WORKSPACE/16-nginx-and-tls/cert-tool.sh" selfsigned example.com 90)
           sudo cp /tmp/example.com.crt /etc/letsencrypt/live/example.com/fullchain.pem
           sudo cp /tmp/example.com.key /etc/letsencrypt/live/example.com/privkey.pem
           sudo cp $GITHUB_WORKSPACE/16-nginx-and-tls/nginx/myapp.conf /etc/nginx/conf.d/myapp.conf
