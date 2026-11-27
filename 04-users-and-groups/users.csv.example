@@ -1,0 +1,5 @@
+# username,groups (separated by ;),shell
+alice,developers;docker,/bin/bash
+bob,developers,/bin/bash
+carol,ops;sudo,/bin/bash
+deploy,,/bin/bash

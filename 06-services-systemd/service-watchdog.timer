@@ -1,0 +1,13 @@
+# /etc/systemd/system/service-watchdog.timer
+# Check:  systemctl list-timers service-watchdog.timer
+
+[Unit]
+Description=Run service-watchdog every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Unit=service-watchdog.service
+
+[Install]
+WantedBy=timers.target

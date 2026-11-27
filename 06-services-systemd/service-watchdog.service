@@ -1,0 +1,14 @@
+# /etc/systemd/system/service-watchdog.service
+# Runs the watchdog once. The timer below starts it every 5 minutes.
+#
+# Install:  sudo cp service-watchdog.sh /usr/local/bin/ && sudo chmod +x /usr/local/bin/service-watchdog.sh
+#           sudo cp service-watchdog.service service-watchdog.timer /etc/systemd/system/
+#           sudo systemctl daemon-reload
+#           sudo systemctl enable --now service-watchdog.timer
+
+[Unit]
+Description=Restart critical services if they are down
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/service-watchdog.sh nginx ssh

@@ -1,0 +1,30 @@
+# /etc/systemd/system/myapp.service
+# A typical unit file for a long-running application.
+#
+# Install:  sudo cp myapp.service /etc/systemd/system/
+#           sudo systemctl daemon-reload
+#           sudo systemctl enable --now myapp
+# Logs:     journalctl -u myapp -f
+
+[Unit]
+Description=My application
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=myapp
+Group=myapp
+WorkingDirectory=/opt/myapp/current
+Environment=NODE_ENV=production
+EnvironmentFile=-/opt/myapp/shared/.env
+ExecStart=/usr/bin/node app.js
+Restart=on-failure
+RestartSec=5
+# Basic hardening
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
